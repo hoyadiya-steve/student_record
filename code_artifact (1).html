@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>생기부 헬퍼 - 초등·중등 교사를 위한 스마트 생활기록부 작성 앱</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+        .font-gowun {
+            font-family: 'Gowun Dodum', sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-sky-100 selection:text-sky-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // NEIS Byte Calculation Helper (한글 3bytes, 영문/숫자/공백 1byte, 줄바꿈 2bytes)
+        const calculateNEISBytes = (text) => {
+            if (!text) return { bytes: 0, chars: 0 };
+            let bytes = 0;
+            const chars = text.length;
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                if (code === 10) { // Newline
+                    bytes += 2;
+                } else if (code > 0x7F) { // Hangeul & Non-ASCII
+                    bytes += 3;
+                } else {
+                    bytes += 1;
+                }
+            }
+            return { bytes, chars };
+        };
+
+        const initialStudents = [
+            {
+                id: '1',
+                number: 1,
+                name: '김민준',
+                gender: '남',
+                gradeType: 'elementary',
+                notes: '수학 모둠 활동 시 또래 친구들에게 친절하게 개념을 설명함. 로봇 과학 동아리 부장으로 책임감 있게 활동.',
+                records: {
+                    behavior: '매사 밝고 긍정적인 태도로 학급 활동에 참여하며, 타인에 대한 배려심이 뛰어남. 모둠 활동 시 학습이 다소 느린 친구에게 먼저 다가가 따뜻한 말과 눈높이 설명으로 끝까지 도우며 학급 내 상호 협력의 분위기를 주도함.',
+                    subject: '',
+                    creative: ''
+                }
+            },
+            {
+                id: '2',
+                number: 2,
+                name: '이지원',
+                gender: '여',
+                gradeType: 'secondary',
+                notes: '문학 작품 분석 능력이 우수함. 비판적 사고력과 논리적 글쓰기 역량이 뛰어남. 독서 토론 모둠장.',
+                records: {
+                    behavior: '',
+                    subject: '국어 시간 제시된 문학 작품의 시상 전개 과정과 인물의 심리 변화를 다각도에서 분석하는 능력이 뛰어남. 비판적 독서 활동을 바탕으로 자신만의 독창적인 논지를 전개하는 논술 역량이 돋보이며 독서 토론 모둠장으로서 활발히 토론을 이끔.',
+                    creative: ''
+                }
+            },
+            {
+                id: '3',
+                number: 3,
+                name: '박서준',
+                gender: '남',
+                gradeType: 'elementary',
+                notes: '체육 시간에 규칙 준수 능력이 좋음. 과학 실험 준비 및 정리 정돈을 솔선수범함.',
+                records: {
+                    behavior: '',
+                    subject: '',
+                    creative: ''
+                }
+            }
+        ];
+
+        const KEYWORD_BANK = {
+            attitude: ['태도 바름', '솔선수범', '배려심 깊음', '경청하는 자세', '자기주도적', '책임감 높음', '끈기 있음', '성실함', '창의적 사고', '성장 지향적'],
+            learning: ['학업 성취도 우수', '개념 이해력 뛰어남', '문제 해결 능력', '질문이 다채로움', '탐구열 높음', '논리적 분석력', '비판적 사고', '발표력 뛰어남'],
+            relation: ['협동심 뛰어남', '또래 교사 역할', '갈등 중재', '공감 능력', '경청과 호응', '친화력 높음', '팀워크 주도', '원만한 인간관계'],
+            subjectSpecific: ['수학적 직관력', '문학적 감수성', '과학적 탐구 역량', '역사적 맥락 이해', '체육 활동 열정', '예술적 표현력', '외국어 표현 능력']
+        };
+
+        const GENERATION_TEMPLATES = {
+            behavior: {
+                intros: [
+                    "매사 밝고 긍정적인 마음가짐으로 학교생활 전반에 적극적으로 참여하는 학생임.",
+                    "타인을 존중하고 배려하는 인성을 바탕으로 학급의 긍정적인 분위기 형성에 기여함.",
+                    "자기 관리 능력이 탁월하며 맡은 임무나 역할을 항상 책임감 있게 완수함.",
+                    "자신의 행동에 책임감을 가지고 원만한 또래 관계를 유지하며 꾸준히 성장하는 모습을 보임.",
+                    "학급 구성원들과 유기적으로 소통하며 공동체 의식을 행동으로 실천하는 성실한 학생임."
+                ],
+                bodyPatterns: [
+                    "특히 {notes}에서 드러나듯, 규칙과 질서를 앞장서 지키고 어려움을 겪는 친구에게 따뜻한 손길을 건넴.",
+                    "구체적으로 {notes} 과정에서 주도적인 태도로 분위기를 활기차게 이끌며 훌륭한 협동심을 발휘함.",
+                    "평소 관찰한 바에 의하면 {notes}라는 점에서 높은 수준의 몰입도와 성실한 실행력을 보여줌.",
+                    "학급 활동 중 {notes}에 있어 남다른 열정을 보여주었으며 주변 친구들에게 긍정적인 자극을 줌."
+                ],
+                conclusions: [
+                    "앞으로도 이와 같은 긍정적인 태도와 배려심을 유지한다면 더욱 큰 성장을 이룰 것으로 기대됨.",
+                    "자신의 강점을 바탕으로 학업과 인성 모든 면에서 모범적인 인재로 발전할 가능성이 높음.",
+                    "주변과 함께 상생하고 발전하려는 자기주도적 성향이 앞으로의 성장에 큰 자산이 될 것임.",
+                    "타인을 향한 따뜻한 공감 능력과 강한 책임감을 바탕으로 훌륭한 리더십을 발휘할 학생임."
+                ]
+            },
+            subject: {
+                intros: [
+                    "교과 핵심 개념에 대한 이해가 깊고, 지적 호기심을 바탕으로 깊이 있는 탐구를 즐기는 학생임.",
+                    "수업 과정에서 자기주도적인 학습 태도를 보이며, 핵심 과제를 완벽히 이해하고 적용하는 역량이 우수함.",
+                    "수업에 집중하는 태도가 뛰어나며, 질문을 통해 논리적 사고를 확장하는 모습이 돋보임.",
+                    "교과 내용에 대한 비판적 접근과 창의적인 시각을 바탕으로 학습 과제를 다각도에서 해결함."
+                ],
+                bodyPatterns: [
+                    "특히 {notes} 단원/활동에서 창의적인 해결법을 제시하며 깊이 있는 탐구 결과를 도출함.",
+                    "구체적 활동으로 {notes} 과정에서 체계적인 계획 수립과 정확한 분석 역량을 입증함.",
+                    "수업 내 모둠 프로젝트 중 {notes} 역할을 성공적으로 수행하여 모둠의 완성도 높은 결과물을 끌어냄.",
+                    "학습 내용 중 {notes}을(를) 바탕으로 자신만의 시각을 논리적으로 정립하여 발표함."
+                ],
+                conclusions: [
+                    "이처럼 우수한 이해력과 탐구 역량을 꾸준히 발전시킨다면 해당 분야의 뛰어난 전문 역량을 형성할 것임.",
+                    "교과에 대한 깊은 관찰력과 사색 능력을 바탕으로 향후 학업적 발전 가능성이 대단히 높음.",
+                    "스스로 문제를 발견하고 해결해 나가는 탐구 태도가 대단히 매력적이며 성장의 밑거름이 됨."
+                ]
+            },
+            creative: {
+                intros: [
+                    "창의적 체험활동에 적극적인 호기심을 가지고 동료들과 협력하여 즐겁게 참여함.",
+                    "자신의 진로 및 관심 분야에 맞춰 주도적으로 활동을 기획하고 이끌어 나가는 추진력이 뛰어남.",
+                    "동아리 및 자율 활동 전반에서 진정성 있는 태도로 공동체의 과제를 해결하려 노력함."
+                ],
+                bodyPatterns: [
+                    "주요 활동으로 {notes}에 참여하여 솔선수범하는 지도력과 협동심을 아낌없이 보여줌.",
+                    "특히 {notes}을(를) 추진하면서 예상치 못한 문제점을 지혜롭게 해결하는 역량을 보여줌.",
+                    "자신의 흥미와 적성을 바탕으로 {notes} 활동에 적극 임하며 깊은 인상을 남김."
+                ],
+                conclusions: [
+                    "이러한 체험 중심의 다채로운 시도와 경험이 향후 진로 탐색에 큰 자양분이 될 것임.",
+                    "자신이 가진 다재다능함과 협동적 태도를 바탕으로 미래 지향적 인재로 성장이 기대됨."
+                ]
+            }
+        };
+
+        function App() {
+            const [schoolLevel, setSchoolLevel] = useState('elementary');
+            const [students, setStudents] = useState(() => {
+                const saved = localStorage.getItem('saengibo_students');
+                return saved ? JSON.parse(saved) : initialStudents;
+            });
+            const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0].id);
+            const [activeTab, setActiveTab] = useState('generator'); // 'generator' | 'bank' | 'bulk'
+            
+            // Generator Inputs
+            const [category, setCategory] = useState('behavior');
+            const [targetByteLength, setTargetByteLength] = useState(500);
+            const [selectedKeywords, setSelectedKeywords] = useState([]);
+            const [studentNote, setStudentNote] = useState('');
+            const [generatedText, setGeneratedText] = useState('');
+            const [toastMessage, setToastMessage] = useState('');
+            
+            // Search & Filters
+            const [searchTerm, setSearchTerm] = useState('');
+
+            // Modals & Popups
+            const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+            const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+            const [shareModalTab, setShareModalTab] = useState('github'); // 'github' | 'file' | 'backup'
+            const [newStudent, setNewStudent] = useState({ name: '', number: '', gender: '남', notes: '' });
+
+            const fileInputRef = useRef(null);
+
+            useEffect(() => {
+                localStorage.setItem('saengibo_students', JSON.stringify(students));
+            }, [students]);
+
+            const currentStudent = useMemo(() => {
+                return students.find(s => s.id === selectedStudentId) || students[0];
+            }, [students, selectedStudentId]);
+
+            useEffect(() => {
+                if (currentStudent) {
+                    setStudentNote(currentStudent.notes || '');
+                    if (currentStudent.records && currentStudent.records[category]) {
+                        setGeneratedText(currentStudent.records[category]);
+                    } else {
+                        setGeneratedText('');
+                    }
+                }
+            }, [selectedStudentId, category]);
+
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            const showToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => setToastMessage(''), 3200);
+            };
+
+            const toggleKeyword = (kw) => {
+                if (selectedKeywords.includes(kw)) {
+                    setSelectedKeywords(selectedKeywords.filter(k => k !== kw));
+                } else {
+                    setSelectedKeywords([...selectedKeywords, kw]);
+                }
+            };
+
+            const handleGenerate = () => {
+                const t = GENERATION_TEMPLATES[category] || GENERATION_TEMPLATES.behavior;
+                const intro = t.intros[Math.floor(Math.random() * t.intros.length)];
+                
+                let detailText = studentNote.trim();
+                if (selectedKeywords.length > 0) {
+                    const kwText = selectedKeywords.join(', ') + " 등 관찰된 주요 특성을 바탕으로 ";
+                    detailText = detailText ? `${kwText} ${detailText}` : kwText;
+                }
+                
+                if (!detailText) {
+                    detailText = schoolLevel === 'elementary' ? "수업 활동 및 모둠 협동 과정" : "수업 참여 및 비판적 사색 과정";
+                }
+
+                const bodyPattern = t.bodyPatterns[Math.floor(Math.random() * t.bodyPatterns.length)];
+                let body = bodyPattern.replace('{notes}', detailText);
+                const conclusion = t.conclusions[Math.floor(Math.random() * t.conclusions.length)];
+
+                let fullResult = `${intro} ${body} ${conclusion}`;
+
+                if (schoolLevel === 'elementary') {
+                    fullResult = fullResult.replace(/확장함\./g, '확장함.').replace(/입증함\./g, '잘 나타냄.');
+                }
+
+                if (targetByteLength <= 350) {
+                    fullResult = `${intro} ${bodyPattern.replace('{notes}', detailText.slice(0, 45))}`;
+                } else if (targetByteLength >= 1000) {
+                    const extraBody = t.bodyPatterns[(Math.floor(Math.random() * t.bodyPatterns.length) + 1) % t.bodyPatterns.length]
+                        .replace('{notes}', selectedKeywords.length > 0 ? `지속적인 ${selectedKeywords[0]} 역량을 고취하며` : '스스로 세운 탐구 목표를 실천하며');
+                    
+                    fullResult = `${intro} ${body} 또한, ${extraBody} ${conclusion} 전반적으로 타의 모범이 되며 성장의 가능성이 무궁무진한 학생임.`;
+                }
+
+                setGeneratedText(fullResult);
+                showToast("생기부 문장이 자동으로 생성되었습니다!");
+            };
+
+            const handleSaveRecord = () => {
+                setStudents(prev => prev.map(s => {
+                    if (s.id === selectedStudentId) {
+                        return {
+                            ...s,
+                            notes: studentNote,
+                            records: {
+                                ...s.records,
+                                [category]: generatedText
+                            }
+                        };
+                    }
+                    return s;
+                }));
+                showToast("학생 생활기록부 내용이 저장되었습니다.");
+            };
+
+            const handleCopy = (textToCopy) => {
+                if (!textToCopy) return;
+                const textarea = document.createElement('textarea');
+                textarea.value = textToCopy;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast("클립보드에 복사되었습니다! NEIS 또는 깃허브에 활용하세요.");
+                } catch (err) {
+                    showToast("복사에 실패했습니다.");
+                }
+                document.body.removeChild(textarea);
+            };
+
+            const handleDownloadHTML = () => {
+                const htmlContent = document.documentElement.outerHTML;
+                const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'index.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("index.html 단일 파일이 다운로드되었습니다!");
+            };
+
+            const handleExportJSON = () => {
+                const dataStr = JSON.stringify(students, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `생기부_학생데이터_백업_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("학생 데이터 백업 파일(JSON)이 다운로드되었습니다.");
+            };
+
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF번호,성명,성별,관찰메모,행동특성및종합의견,교과세특,창의적체험활동\n";
+                students.forEach(s => {
+                    const cleanNote = (s.notes || '').replace(/"/g, '""');
+                    const cleanBh = (s.records?.behavior || '').replace(/"/g, '""');
+                    const cleanSb = (s.records?.subject || '').replace(/"/g, '""');
+                    const cleanCr = (s.records?.creative || '').replace(/"/g, '""');
+                    csvContent += `"${s.number}","${s.name}","${s.gender}","${cleanNote}","${cleanBh}","${cleanSb}","${cleanCr}"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `생기부_작성목록_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("엑셀 호환 CSV 파일이 다운로드되었습니다.");
+            };
+
+            const handleAddStudent = (e) => {
+                e.preventDefault();
+                if (!newStudent.name) return;
+                const created = {
+                    id: Date.now().toString(),
+                    number: parseInt(newStudent.number) || students.length + 1,
+                    name: newStudent.name,
+                    gender: newStudent.gender,
+                    gradeType: schoolLevel,
+                    notes: newStudent.notes || '',
+                    records: { behavior: '', subject: '', creative: '' }
+                };
+                setStudents([...students, created]);
+                setSelectedStudentId(created.id);
+                setNewStudent({ name: '', number: '', gender: '남', notes: '' });
+                setIsAddStudentOpen(false);
+                showToast(`${created.name} 학생이 추가되었습니다.`);
+            };
+
+            const handleDeleteStudent = (id, name) => {
+                const filtered = students.filter(s => s.id !== id);
+                setStudents(filtered);
+                if (selectedStudentId === id && filtered.length > 0) {
+                    setSelectedStudentId(filtered[0].id);
+                }
+                showToast(`${name} 학생 정보가 삭제되었습니다.`);
+            };
+
+            const byteStats = calculateNEISBytes(generatedText);
+
+            return (
+                <div className="min-h-screen flex flex-col bg-slate-50">
+                    {}
+                    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-sky-500 text-white rounded-xl shadow-md shadow-sky-100">
+                                    <i data-lucide="book-open-check" className="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                                        생기부 헬퍼
+                                        <span className="text-xs font-normal px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full">v2.5</span>
+                                    </h1>
+                                    <p className="text-xs text-slate-500 hidden sm:block">초등·중등 교사를 위한 스마트 생활기록부 작성 도우미</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center space-x-3">
+                                <button
+                                    onClick={() => setIsShareModalOpen(true)}
+                                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-md transition-all flex items-center gap-1.5"
+                                >
+                                    <i data-lucide="github" className="w-4 h-4 text-sky-400"></i>
+                                    <span>GitHub 배포 & 공유</span>
+                                </button>
+
+                                <div className="bg-slate-100 p-1 rounded-xl flex text-xs font-medium border border-slate-200">
+                                    <button
+                                        onClick={() => setSchoolLevel('elementary')}
+                                        className={`px-3 py-1.5 rounded-lg transition-all ${schoolLevel === 'elementary' ? 'bg-white text-sky-700 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                                    >
+                                        초등학교
+                                    </button>
+                                    <button
+                                        onClick={() => setSchoolLevel('secondary')}
+                                        className={`px-3 py-1.5 rounded-lg transition-all ${schoolLevel === 'secondary' ? 'bg-white text-sky-700 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                                    >
+                                        중·고등학교
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {toastMessage && (
+                        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2 text-sm animate-bounce">
+                            <i data-lucide="check-circle-2" className="w-4 h-4 text-emerald-400"></i>
+                            <span>{toastMessage}</span>
+                        </div>
+                    )}
+
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col md:flex-row gap-6">
+                        
+                        {}
+                        <aside className="w-full md:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col overflow-hidden h-[calc(100vh-6rem)] md:sticky md:top-20">
+                            <div className="p-4 border-b border-slate-100 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                                        <i data-lucide="users" className="w-4 h-4 text-sky-600"></i>
+                                        학생 목록 <span className="text-xs font-normal text-slate-400">({students.length}명)</span>
+                                    </h2>
+                                    <button
+                                        onClick={() => setIsAddStudentOpen(true)}
+                                        className="p-1.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                                    >
+                                        <i data-lucide="user-plus" className="w-3.5 h-3.5"></i>
+                                        학생 추가
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <i data-lucide="search" className="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+                                    <input
+                                        type="text"
+                                        placeholder="이름 또는 번호 검색..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {students
+                                    .filter(s => s.name.includes(searchTerm) || s.number.toString().includes(searchTerm))
+                                    .map((s) => {
+                                        const isSelected = s.id === selectedStudentId;
+                                        const hasRecord = s.records && (s.records.behavior || s.records.subject || s.records.creative);
+                                        return (
+                                            <div
+                                                key={s.id}
+                                                onClick={() => setSelectedStudentId(s.id)}
+                                                className={`p-3 rounded-xl cursor-pointer transition-all flex items-center justify-between border ${
+                                                    isSelected
+                                                        ? 'bg-sky-50/80 border-sky-200 shadow-sm'
+                                                        : 'hover:bg-slate-50 border-transparent'
+                                                }`}
+                                            >
+                                                <div className="flex items-center space-x-3">
+                                                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                        isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        {s.number}
+                                                    </span>
+                                                    <div>
+                                                        <div className="font-medium text-sm text-slate-800 flex items-center gap-1">
+                                                            {s.name}
+                                                            <span className="text-[10px] text-slate-400">({s.gender})</span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-400 truncate max-w-[140px]">
+                                                            {s.notes || '특이사항 메모 없음'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center space-x-1">
+                                                    {hasRecord && (
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-500" title="작성된 내용 있음"></span>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteStudent(s.id, s.name);
+                                                        }}
+                                                        className="p-1 text-slate-300 hover:text-rose-500 rounded transition-colors"
+                                                        title="학생 삭제"
+                                                    >
+                                                        <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </aside>
+
+                        <main className="flex-1 flex flex-col space-y-6">
+                            
+                            <div className="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm flex space-x-2">
+                                <button
+                                    onClick={() => setActiveTab('generator')}
+                                    className={`flex-1 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all ${
+                                        activeTab === 'generator'
+                                            ? 'bg-sky-600 text-white shadow-md shadow-sky-200'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i data-lucide="sparkles" className="w-4 h-4"></i>
+                                    생기부 자동 생성기
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('bank')}
+                                    className={`flex-1 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all ${
+                                        activeTab === 'bank'
+                                            ? 'bg-sky-600 text-white shadow-md shadow-sky-200'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i data-lucide="library" className="w-4 h-4"></i>
+                                    추천 표현 문구집
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('bulk')}
+                                    className={`flex-1 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all ${
+                                        activeTab === 'bulk'
+                                            ? 'bg-sky-600 text-white shadow-md shadow-sky-200'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <i data-lucide="file-text" className="w-4 h-4"></i>
+                                    전체 내보내기 & 관리
+                                </button>
+                            </div>
+
+                            {}
+                            {activeTab === 'generator' && (
+                                <div className="space-y-6">
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 font-bold flex items-center justify-center text-lg">
+                                                {currentStudent?.number}번
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-lg font-bold text-slate-800">{currentStudent?.name}</h3>
+                                                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                                        {currentStudent?.gender}학생
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {schoolLevel === 'elementary' ? '초등학교 생활기록부 양식' : '중·고등학교 생활기록부 양식'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                                            <button
+                                                onClick={() => setCategory('behavior')}
+                                                className={`px-3 py-2 rounded-lg transition-all ${
+                                                    category === 'behavior' ? 'bg-white text-sky-700 shadow-sm font-semibold' : 'text-slate-600'
+                                                }`}
+                                            >
+                                                행동특성 및 종합의견
+                                            </button>
+                                            <button
+                                                onClick={() => setCategory('subject')}
+                                                className={`px-3 py-2 rounded-lg transition-all ${
+                                                    category === 'subject' ? 'bg-white text-sky-700 shadow-sm font-semibold' : 'text-slate-600'
+                                                }`}
+                                            >
+                                                교과 세특
+                                            </button>
+                                            <button
+                                                onClick={() => setCategory('creative')}
+                                                className={`px-3 py-2 rounded-lg transition-all ${
+                                                    category === 'creative' ? 'bg-white text-sky-700 shadow-sm font-semibold' : 'text-slate-600'
+                                                }`}
+                                            >
+                                                창의적 체험활동
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <i data-lucide="ruler" className="w-3.5 h-3.5 text-sky-600"></i>
+                                                원하는 문장 글자 수 / 바이트(Byte) 지정
+                                            </label>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                {[
+                                                    { label: '단문 (약 300 Byte)', val: 300, desc: '핵심 요약형 (~100자)' },
+                                                    { label: '중문 (약 500 Byte)', val: 500, desc: '표준 작성형 (~170자)' },
+                                                    { label: '장문 (약 1000 Byte)', val: 1000, desc: '상세 기록형 (~330자)' },
+                                                    { label: '최대 (약 1500 Byte)', val: 1500, desc: '풍부한 사례형 (~500자)' }
+                                                ].map((item) => (
+                                                    <button
+                                                        key={item.val}
+                                                        onClick={() => setTargetByteLength(item.val)}
+                                                        className={`p-3 text-left rounded-xl border transition-all ${
+                                                            targetByteLength === item.val
+                                                                ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-500/20'
+                                                                : 'border-slate-200 hover:border-slate-300 bg-white'
+                                                        }`}
+                                                    >
+                                                        <div className={`text-xs font-bold ${targetByteLength === item.val ? 'text-sky-700' : 'text-slate-700'}`}>
+                                                            {item.label}
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-400 mt-0.5">{item.desc}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <i data-lucide="tags" className="w-3.5 h-3.5 text-sky-600"></i>
+                                                포함할 핵심 키워드 선택 (복수 선택 가능)
+                                            </label>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {Object.values(KEYWORD_BANK).flat().map((kw) => {
+                                                    const isSelected = selectedKeywords.includes(kw);
+                                                    return (
+                                                        <button
+                                                            key={kw}
+                                                            onClick={() => toggleKeyword(kw)}
+                                                            className={`px-3 py-1 rounded-lg text-xs transition-all flex items-center gap-1 ${
+                                                                isSelected
+                                                                    ? 'bg-sky-600 text-white font-medium shadow-sm'
+                                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                            }`}
+                                                        >
+                                                            {isSelected && <i data-lucide="check" className="w-3 h-3"></i>}
+                                                            {kw}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                                <span className="flex items-center gap-1.5">
+                                                    <i data-lucide="pen-tool" className="w-3.5 h-3.5 text-sky-600"></i>
+                                                    학생 상세 관찰 메모 / 구체적 에피소드
+                                                </span>
+                                                <span className="text-[11px] font-normal text-slate-400">교사의 평소 관찰 메모를 작성해 주세요</span>
+                                            </label>
+                                            <textarea
+                                                rows="3"
+                                                value={studentNote}
+                                                onChange={(e) => setStudentNote(e.target.value)}
+                                                placeholder="예: 과학 실험 수행 평가 시 가설 설정 능력이 뛰어남. 어려움을 겪는 친구에게 실험 기구 사용법을 설명해 줌."
+                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all placeholder:text-slate-400"
+                                            ></textarea>
+                                        </div>
+
+                                        <button
+                                            onClick={handleGenerate}
+                                            className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl shadow-lg shadow-sky-600/20 transition-all flex items-center justify-center gap-2 group"
+                                        >
+                                            <i data-lucide="wand-2" className="w-5 h-5 group-hover:rotate-12 transition-transform"></i>
+                                            원하는 길이의 생기부 문장 자동 생성하기
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                            <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                                <i data-lucide="file-output" className="w-4 h-4 text-sky-600"></i>
+                                                생성된 생활기록부 문안 (수정 가능)
+                                            </h3>
+
+                                            <div className="flex items-center space-x-3 text-xs">
+                                                <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-lg">
+                                                    <span className="text-slate-500">NEIS Byte:</span>
+                                                    <span className={`font-bold ${byteStats.bytes > targetByteLength ? 'text-amber-600' : 'text-sky-700'}`}>
+                                                        {byteStats.bytes} Byte
+                                                    </span>
+                                                    <span className="text-slate-400">/ {targetByteLength} Byte</span>
+                                                </div>
+                                                <div className="text-slate-400 hidden sm:inline">
+                                                    ({byteStats.chars}자)
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="relative">
+                                            <textarea
+                                                rows="6"
+                                                value={generatedText}
+                                                onChange={(e) => setGeneratedText(e.target.value)}
+                                                placeholder="[자동 생성하기] 버튼을 누르면 이곳에 맞춤형 문장이 생성됩니다."
+                                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 leading-relaxed font-gowun text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
+                                            ></textarea>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                                            <div className="flex items-center space-x-2 text-xs text-slate-500">
+                                                <i data-lucide="info" className="w-4 h-4 text-sky-500"></i>
+                                                <span>NEIS 기준: 한글 3Byte, 영문/숫자 1Byte, 줄바꿈 2Byte</span>
+                                            </div>
+
+                                            <div className="flex items-center space-x-2">
+                                                <button
+                                                    onClick={() => handleCopy(generatedText)}
+                                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-xl transition-colors flex items-center gap-1.5"
+                                                >
+                                                    <i data-lucide="copy" className="w-3.5 h-3.5"></i>
+                                                    복사하기
+                                                </button>
+                                                <button
+                                                    onClick={handleSaveRecord}
+                                                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-medium text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+                                                >
+                                                    <i data-lucide="save" className="w-3.5 h-3.5"></i>
+                                                    학생 기록 저장
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {}
+                            {activeTab === 'bank' && (
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                                    <div className="border-b border-slate-100 pb-4">
+                                        <h3 className="text-lg font-bold text-slate-800">생활기록부 표준 추천 문구 창고</h3>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            교육부 평어 작성 지침에 부합하는 영역별 우수 문장을 원클릭으로 선택 및 복사할 수 있습니다.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        {[
+                                            {
+                                                title: '인성 & 대인관계 (행동특성)',
+                                                icon: 'heart-handshake',
+                                                phrases: [
+                                                    "타인의 의견을 잘 경청하며 배려심 깊은 태도로 모둠 활동에서 가교 역할을 충실히 수행함.",
+                                                    "학급 내 어려운 친구를 도우려는 성품이 따뜻하며 공감 능력이 매우 뛰어남.",
+                                                    "규칙을 준수하고 스스로 솔선수범하여 쾌적한 학급 환경 조성에 앞장섬."
+                                                ]
+                                            },
+                                            {
+                                                title: '학업 태도 & 탐구 역량 (세특)',
+                                                icon: 'brain-circuit',
+                                                phrases: [
+                                                    "교과서의 기본 개념을 명확히 이해하고 관련 심화 논문을 탐구하는 등 주도적 학습열이 높음.",
+                                                    "수업 시간 적극적인 질의응답을 통해 문제 해결 능력을 다각도로 발휘함.",
+                                                    "비판적 사고력을 바탕으로 논리정연하게 관점을 정립하고 창의적인 해결책을 제시함."
+                                                ]
+                                            },
+                                            {
+                                                title: '리더십 & 협동 (창체)',
+                                                icon: 'award',
+                                                phrases: [
+                                                    "동아리 리더로서 구성원들의 다양한 의견을 민주적으로 조율하며 모범을 보임.",
+                                                    "프로젝트 기획 및 실행 과정에서 명확한 목표 설정과 뛰어난 추진력을 발휘함."
+                                                ]
+                                            }
+                                        ].map((sec, idx) => (
+                                            <div key={idx} className="space-y-3">
+                                                <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                    <i data-lucide={sec.icon} className="w-4 h-4 text-sky-600"></i>
+                                                    {sec.title}
+                                                </h4>
+                                                <div className="grid gap-2">
+                                                    {sec.phrases.map((phrase, pIdx) => (
+                                                        <div
+                                                            key={pIdx}
+                                                            className="p-3 bg-slate-50 hover:bg-sky-50/50 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs text-slate-700 transition-colors"
+                                                        >
+                                                            <span className="font-gowun text-sm flex-1 pr-4">{phrase}</span>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setGeneratedText(prev => prev ? `${prev} ${phrase}` : phrase);
+                                                                    showToast("생성기 편집창에 문장이 추가되었습니다!");
+                                                                }}
+                                                                className="px-2.5 py-1 bg-white hover:bg-sky-600 hover:text-white border border-slate-200 text-slate-600 rounded-lg font-medium text-[11px] transition-all flex items-center gap-1 shrink-0"
+                                                            >
+                                                                <i data-lucide="plus" className="w-3 h-3"></i>
+                                                                문장 추가
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {}
+                            {activeTab === 'bulk' && (
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-slate-800">전체 학생 생기부 관리 및 데이터 내보내기</h3>
+                                            <p className="text-xs text-slate-500 mt-1">학급 전체 학생의 작성 현황을 조회하고 엑셀(CSV) 또는 전체 텍스트로 내보낼 수 있습니다.</p>
+                                        </div>
+                                        
+                                        <div className="flex items-center space-x-2">
+                                            <button
+                                                onClick={handleExportCSV}
+                                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+                                            >
+                                                <i data-lucide="file-spread-sheet" className="w-4 h-4"></i>
+                                                엑셀(CSV) 다운로드
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const content = students.map(s => 
+                                                        `[${s.number}번 ${s.name}]\n- 행동특성: ${s.records.behavior || '미작성'}\n- 교과세특: ${s.records.subject || '미작성'}\n- 창의체험: ${s.records.creative || '미작성'}\n\n`
+                                                    ).join('-----------------------------------\n');
+                                                    handleCopy(content);
+                                                }}
+                                                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-medium text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+                                            >
+                                                <i data-lucide="copy" className="w-4 h-4"></i>
+                                                전체 텍스트 복사
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                                        <table className="w-full text-left text-xs text-slate-600">
+                                            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-3 w-12 text-center">번호</th>
+                                                    <th className="p-3 w-20">성명</th>
+                                                    <th className="p-3">행동특성 및 종합의견</th>
+                                                    <th className="p-3">교과 세특</th>
+                                                    <th className="p-3 w-20 text-center">작성 상태</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {students.map((s) => {
+                                                    const bh = s.records?.behavior;
+                                                    const sb = s.records?.subject;
+                                                    const isComplete = bh || sb;
+                                                    return (
+                                                        <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-3 text-center font-bold text-slate-800">{s.number}</td>
+                                                            <td className="p-3 font-medium text-slate-900">{s.name}</td>
+                                                            <td className="p-3 font-gowun text-slate-700 max-w-xs truncate">
+                                                                {bh || <span className="text-slate-300">미작성</span>}
+                                                            </td>
+                                                            <td className="p-3 font-gowun text-slate-700 max-w-xs truncate">
+                                                                {sb || <span className="text-slate-300">미작성</span>}
+                                                            </td>
+                                                            <td className="p-3 text-center">
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                                    isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                                                                }`}>
+                                                                    {isComplete ? '작성 완료' : '미완료'}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                        </main>
+                    </div>
+
+                    {/* Modal 1: Add New Student */}
+                    {isAddStudentOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                        <i data-lucide="user-plus" className="w-5 h-5 text-sky-600"></i>
+                                        신규 학생 등록
+                                    </h3>
+                                    <button
+                                        onClick={() => setIsAddStudentOpen(false)}
+                                        className="text-slate-400 hover:text-slate-600"
+                                    >
+                                        <i data-lucide="x" className="w-5 h-5"></i>
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleAddStudent} className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-700 mb-1">출석 번호</label>
+                                            <input
+                                                type="number"
+                                                required
+                                                value={newStudent.number}
+                                                onChange={(e) => setNewStudent({ ...newStudent, number: e.target.value })}
+                                                placeholder="예: 4"
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-sky-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-700 mb-1">학생 이름</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={newStudent.name}
+                                                onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                                                placeholder="성명"
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-sky-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 mb-1">성별</label>
+                                        <div className="flex space-x-3">
+                                            {['남', '여'].map((g) => (
+                                                <label key={g} className="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="gender"
+                                                        value={g}
+                                                        checked={newStudent.gender === g}
+                                                        onChange={(e) => setNewStudent({ ...newStudent, gender: e.target.value })}
+                                                        className="text-sky-600 focus:ring-sky-500"
+                                                    />
+                                                    <span>{g}학생</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 mb-1">기본 관찰 특이사항 (선택)</label>
+                                        <textarea
+                                            rows="2"
+                                            value={newStudent.notes}
+                                            onChange={(e) => setNewStudent({ ...newStudent, notes: e.target.value })}
+                                            placeholder="학생의 평소 행동 특징이나 학업 성향"
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-sky-500"
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="flex justify-end space-x-2 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddStudentOpen(false)}
+                                            className="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-medium rounded-xl hover:bg-slate-200"
+                                        >
+                                            취소
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="px-4 py-2 bg-sky-600 text-white text-xs font-medium rounded-xl hover:bg-sky-700 shadow-sm"
+                                        >
+                                            등록하기
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {}
+                    {isShareModalOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-2 bg-slate-900 text-sky-400 rounded-xl">
+                                            <i data-lucide="github" className="w-5 h-5"></i>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-slate-800 text-base">GitHub Pages 웹 공개 & 배포 가이드</h3>
+                                            <p className="text-xs text-slate-500">누구나 접속할 수 있는 무료 웹 사이트주소(URL) 만들기</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setIsShareModalOpen(false)}
+                                        className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                                    >
+                                        <i data-lucide="x" className="w-5 h-5"></i>
+                                    </button>
+                                </div>
+
+                                {/* Modal Sub-tabs */}
+                                <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                                    <button
+                                        onClick={() => setShareModalTab('github')}
+                                        className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            shareModalTab === 'github' ? 'bg-white text-sky-700 shadow-sm font-bold' : 'text-slate-600'
+                                        }`}
+                                    >
+                                        <i data-lucide="github" className="w-3.5 h-3.5"></i>
+                                        1. GitHub Pages 배포 절차
+                                    </button>
+                                    <button
+                                        onClick={() => setShareModalTab('file')}
+                                        className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            shareModalTab === 'file' ? 'bg-white text-sky-700 shadow-sm font-bold' : 'text-slate-600'
+                                        }`}
+                                    >
+                                        <i data-lucide="download" className="w-3.5 h-3.5"></i>
+                                        2. index.html 파일 저장
+                                    </button>
+                                    <button
+                                        onClick={() => setShareModalTab('backup')}
+                                        className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            shareModalTab === 'backup' ? 'bg-white text-sky-700 shadow-sm font-bold' : 'text-slate-600'
+                                        }`}
+                                    >
+                                        <i data-lucide="database" className="w-3.5 h-3.5"></i>
+                                        3. 데이터 백업
+                                    </button>
+                                </div>
+
+                                {/* Tab 1: GitHub Pages Deployment Guide */}
+                                {shareModalTab === 'github' && (
+                                    <div className="space-y-4 text-xs text-slate-600">
+                                        <div className="p-4 bg-sky-50 border border-sky-100 rounded-xl space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
+                                                    <i data-lucide="globe" className="w-4 h-4 text-sky-600"></i>
+                                                    깃허브(GitHub Pages)로 2분 만에 나만의 웹 사이트 게시하기
+                                                </h4>
+                                                <button
+                                                    onClick={handleDownloadHTML}
+                                                    className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white font-medium rounded-lg text-xs transition-colors flex items-center gap-1 shadow-sm"
+                                                >
+                                                    <i data-lucide="download" className="w-3 h-3"></i>
+                                                    `index.html` 파일 먼저 받기
+                                                </button>
+                                            </div>
+                                            <p className="text-slate-600 leading-relaxed">
+                                                깃허브는 <b>무료 웹 호스팅(GitHub Pages)</b> 서비스를 제공합니다. 서버 구축 없이 `index.html` 파일 하나만 업로드하면 고유한 URL이 생성됩니다.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
+                                                <div className="flex items-center gap-2 text-slate-800 font-bold">
+                                                    <span className="w-5 h-5 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px]">1</span>
+                                                    깃허브 로그인 & 새 저장소(Repository) 만들기
+                                                </div>
+                                                <p className="pl-7 text-slate-600">
+                                                    GitHub (github.com)에 로그인 후, 우측 상단 <b>[+]</b> 버튼 → <b>[New repository]</b>를 클릭합니다.
+                                                    <br />
+                                                    Repository name에 <code className="bg-slate-200 px-1 py-0.5 rounded text-sky-800">saengibo-helper</code> 입력 후 <b>Public</b> 상태로 <b>[Create repository]</b>를 누릅니다.
+                                                </p>
+                                            </div>
+
+                                            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
+                                                <div className="flex items-center gap-2 text-slate-800 font-bold">
+                                                    <span className="w-5 h-5 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px]">2</span>
+                                                    `index.html` 파일 업로드하기
+                                                </div>
+                                                <p className="pl-7 text-slate-600">
+                                                    새로 만들어진 저장소 화면에서 <b>"uploading an existing file"</b> 링크를 클릭합니다.
+                                                    <br />
+                                                    다운로드한 <code className="bg-slate-200 px-1 py-0.5 rounded text-sky-800">index.html</code> 파일을 드래그하여 올린 후, 아래쪽 초록색 <b>[Commit changes]</b> 버튼을 누릅니다.
+                                                </p>
+                                            </div>
+
+                                            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
+                                                <div className="flex items-center gap-2 text-slate-800 font-bold">
+                                                    <span className="w-5 h-5 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px]">3</span>
+                                                    GitHub Pages 옵션 켜기
+                                                </div>
+                                                <p className="pl-7 text-slate-600">
+                                                    상단 메뉴 <b>[Settings]</b> → 좌측 메뉴 <b>[Pages]</b>로 이동합니다.
+                                                    <br />
+                                                    Build and deployment의 <b>Branch</b> 항목을 <code className="bg-slate-200 px-1 py-0.5 rounded text-sky-800">main</code>으로 설정하고 <b>[Save]</b>를 누릅니다.
+                                                </p>
+                                            </div>
+
+                                            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1.5">
+                                                <div className="flex items-center gap-2 text-emerald-900 font-bold">
+                                                    <span className="w-5 h-5 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px]">4</span>
+                                                    완성된 웹 사이트 URL 접속 및 동료 공유
+                                                </div>
+                                                <p className="pl-7 text-emerald-800">
+                                                    약 1~2분 뒤 페이지를 새로고침하면 상단에 <b>"Your site is live at https://내아이디.github.io/saengibo-helper/"</b> 주소가 생성됩니다!
+                                                    이 주소를 동료 선생님들께 전달하면 웹상에서 자유롭게 사용하실 수 있습니다.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Tab 2: Single HTML File Download */}
+                                {shareModalTab === 'file' && (
+                                    <div className="space-y-4 text-xs text-slate-600">
+                                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                            <h4 className="font-bold text-slate-800 text-sm">단일 HTML 앱 파일 소장</h4>
+                                            <p className="text-slate-600 leading-relaxed">
+                                                모든 스타일, 스크립트, 기능이 단 하나의 파일 안에 완벽히 통합되어 있습니다. 오프라인 상태나 개인 USB, 메일 첨부로 보관 및 공유할 수 있습니다.
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={handleDownloadHTML}
+                                            className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <i data-lucide="file-code" className="w-4 h-4"></i>
+                                            `index.html` 파일 내컴퓨터로 다운로드
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Tab 3: Data Backup */}
+                                {shareModalTab === 'backup' && (
+                                    <div className="space-y-4 text-xs text-slate-600">
+                                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                                            <h4 className="font-bold text-amber-900 text-sm">학급 작성 데이터 백업 및 이동</h4>
+                                            <p className="text-amber-800 leading-relaxed">
+                                                다른 PC나 다른 브라우저로 이동할 때 작성된 학생 명단과 생성 결과를 안전하게 파일로 백업하고 가져올 수 있습니다.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={handleExportJSON}
+                                                className="p-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center gap-2"
+                                            >
+                                                <i data-lucide="download-cloud" className="w-5 h-5 text-sky-600"></i>
+                                                <span>데이터 내보내기 (JSON 백업)</span>
+                                            </button>
+
+                                            <label className="p-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center gap-2 cursor-pointer">
+                                                <i data-lucide="upload-cloud" className="w-5 h-5 text-emerald-600"></i>
+                                                <span>데이터 불러오기 (JSON 복원)</span>
+                                                <input
+                                                    type="file"
+                                                    accept=".json"
+                                                    ref={fileInputRef}
+                                                    onChange={handleImportJSON}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
