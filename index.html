@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>생기부 헬퍼 - 초등·중등 교사를 위한 스마트 생활기록부 작성 앱</title>
+    <title>문장호의 생기부 헬퍼 - 초등·중등 교사를 위한 스마트 생활기록부 작성 앱</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -87,7 +87,7 @@
             {
                 id: '1',
                 number: 1,
-                name: '김민준',
+                name: '문장호',
                 gender: '남',
                 gradeType: 'elementary',
                 notes: '수학 모둠 활동 시 또래 친구들에게 친절하게 개념을 설명함. 로봇 과학 동아리 부장으로 책임감 있게 활동.',
@@ -427,14 +427,7 @@
                             </div>
 
                             <div className="flex items-center space-x-3">
-                                <button
-                                    onClick={() => setIsShareModalOpen(true)}
-                                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-md transition-all flex items-center gap-1.5"
-                                >
-                                    <i data-lucide="github" className="w-4 h-4 text-sky-400"></i>
-                                    <span>GitHub 배포 & 공유</span>
-                                </button>
-
+                                
                                 <div className="bg-slate-100 p-1 rounded-xl flex text-xs font-medium border border-slate-200">
                                     <button
                                         onClick={() => setSchoolLevel('elementary')}
